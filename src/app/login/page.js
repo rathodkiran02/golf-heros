@@ -1,16 +1,37 @@
 'use client'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isSignup, setIsSignup] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  async function checkSubscriptionAndRedirect(token) {
+    try {
+      const res = await fetch('/api/subscriptions', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const data = await res.json()
+      const from = searchParams.get('from')
+      if (from) {
+        router.push(from)
+      } else if (data.subscription?.status === 'active') {
+        router.push('/dashboard')
+      } else {
+        router.push('/subscribe')
+      }
+    } catch {
+      router.push('/subscribe')
+    }
+  }
 
   async function handleSubmit() {
     setLoading(true)
@@ -23,16 +44,16 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password, full_name: fullName })
       })
       const data = await res.json()
-      console.log('Signup response:', data)  // ← add this
       if (data.error) { setError(data.error); setLoading(false); return }
 
-      await supabase.auth.signInWithPassword({ email, password })
-      router.push('/dashboard')
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInError) { setError(signInError.message); setLoading(false); return }
+      await checkSubscriptionAndRedirect(signInData.session.access_token)
+
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      console.log('Login error:', error)  // ← add this
-      if (error) { setError(error.message); setLoading(false); return }
-      router.push('/dashboard')
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInError) { setError(signInError.message); setLoading(false); return }
+      await checkSubscriptionAndRedirect(signInData.session.access_token)
     }
   }
 
@@ -40,13 +61,11 @@ export default function LoginPage() {
     <div className="min-h-screen bg-black flex items-center justify-center px-4">
       <div className="w-full max-w-md">
 
-        {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-white">⛳ Golf Heroes</h1>
           <p className="text-gray-400 mt-2">Golf. Charity. Prizes.</p>
         </div>
 
-        {/* Card */}
         <div className="bg-gray-900 rounded-2xl p-8 border border-gray-800">
           <h2 className="text-xl font-semibold text-white mb-6">
             {isSignup ? 'Create your account' : 'Welcome back'}
@@ -59,7 +78,7 @@ export default function LoginPage() {
                 type="text"
                 value={fullName}
                 onChange={e => setFullName(e.target.value)}
-                className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 border border-gray-700 focus:outline-none focus:border-green-500"
+                className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 border border-gray-700 focus:outline-none focus:border-emerald-500"
                 placeholder="Your name"
               />
             </div>
@@ -71,7 +90,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 border border-gray-700 focus:outline-none focus:border-green-500"
+              className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 border border-gray-700 focus:outline-none focus:border-emerald-500"
               placeholder="you@example.com"
             />
           </div>
@@ -82,7 +101,7 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 border border-gray-700 focus:outline-none focus:border-green-500"
+              className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 border border-gray-700 focus:outline-none focus:border-emerald-500"
               placeholder="••••••••"
             />
           </div>
@@ -96,7 +115,7 @@ export default function LoginPage() {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
+            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50"
           >
             {loading ? 'Please wait...' : isSignup ? 'Create Account' : 'Sign In'}
           </button>
@@ -104,8 +123,8 @@ export default function LoginPage() {
           <p className="text-center text-gray-500 text-sm mt-6">
             {isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}
             <button
-              onClick={() => setIsSignup(!isSignup)}
-              className="text-green-400 hover:text-green-300"
+              onClick={() => { setIsSignup(!isSignup); setError('') }}
+              className="text-emerald-400 hover:text-emerald-300"
             >
               {isSignup ? 'Sign in' : 'Sign up'}
             </button>
@@ -114,5 +133,13 @@ export default function LoginPage() {
 
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }

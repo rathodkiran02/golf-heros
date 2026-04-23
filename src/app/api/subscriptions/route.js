@@ -1,7 +1,6 @@
 import { supabase, supabaseWithToken } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
 
-// GET - get user's current subscription
 export async function GET(request) {
   const authHeader = request.headers.get('authorization')
   const token = authHeader?.replace('Bearer ', '')
@@ -18,13 +17,14 @@ export async function GET(request) {
     .select('*')
     .eq('user_id', user.id)
     .eq('status', 'active')
-    .single()
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
   if (error) return NextResponse.json({ subscription: null })
   return NextResponse.json({ subscription: data })
 }
 
-// POST - create a subscription (mocked, no Stripe yet)
 export async function POST(request) {
   const authHeader = request.headers.get('authorization')
   const token = authHeader?.replace('Bearer ', '')
@@ -36,6 +36,17 @@ export async function POST(request) {
 
   const db = supabaseWithToken(token)
   const { plan_type } = await request.json()
+
+  const { data: existing } = await db
+    .from('subscriptions')
+    .select('id, status')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (existing) {
+    return NextResponse.json({ message: 'Already subscribed', subscription: existing })
+  }
 
   const start_date = new Date()
   const end_date = new Date()
