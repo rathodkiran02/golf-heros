@@ -12,8 +12,12 @@ export default function Dashboard() {
   const [charities, setCharities] = useState([])
   const [myCharity, setMyCharity] = useState(null)
   const [winners, setWinners] = useState([])
+  const [draws, setDraws] = useState([])
   const [newScore, setNewScore] = useState('')
   const [newDate, setNewDate] = useState('')
+  const [editingScore, setEditingScore] = useState(null)
+  const [editVal, setEditVal] = useState('')
+  const [editDate, setEditDate] = useState('')
   const [message, setMessage] = useState('')
   const [subscribing, setSubscribing] = useState(false)
   const [userRole, setUserRole] = useState('subscriber')
@@ -27,13 +31,14 @@ export default function Dashboard() {
     const token = session.access_token
     const headers = { 'Authorization': `Bearer ${token}` }
 
-    const [scoresRes, subRes, charitiesRes, myCharityRes, winnersRes, profileRes] = await Promise.all([
+    const [scoresRes, subRes, charitiesRes, myCharityRes, winnersRes, profileRes, drawsRes] = await Promise.all([
       fetch('/api/scores', { headers }),
       fetch('/api/subscriptions', { headers }),
       fetch('/api/charities'),
       fetch('/api/charities/select', { headers }),
       fetch('/api/winners', { headers }),
-      fetch('/api/admin/users', { headers })
+      fetch('/api/admin/users', { headers }),
+      fetch('/api/draws')
     ])
 
     const scoresData = await scoresRes.json()
@@ -41,12 +46,14 @@ export default function Dashboard() {
     const charitiesData = await charitiesRes.json()
     const myCharityData = await myCharityRes.json()
     const winnersData = await winnersRes.json()
+    const drawsData = await drawsRes.json()
 
     setScores(scoresData.scores || [])
     setSubscription(subData.subscription)
     setCharities(charitiesData.charities || [])
     setMyCharity(myCharityData.selection)
     setWinners(winnersData.winners || [])
+    setDraws(drawsData.draws || [])
 
     // Check if admin
     if (profileRes.status === 200) {
@@ -81,10 +88,7 @@ export default function Dashboard() {
     const token = session.access_token
     const res = await fetch('/api/scores', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ score: scoreNum, score_date: newDate })
     })
     const data = await res.json()
@@ -92,6 +96,34 @@ export default function Dashboard() {
     setMessage('Score added!')
     setNewScore('')
     setNewDate('')
+    fetchAll()
+  }
+
+  async function saveEditScore() {
+    if (!editVal || !editDate) return
+    const scoreNum = parseInt(editVal)
+    if (scoreNum < 1 || scoreNum > 45) { setMessage('Score must be between 1 and 45'); return }
+    const token = session.access_token
+    const res = await fetch('/api/scores', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id: editingScore, score: scoreNum, score_date: editDate })
+    })
+    const data = await res.json()
+    if (data.error) { setMessage(data.error); return }
+    setEditingScore(null)
+    setMessage('Score updated!')
+    fetchAll()
+  }
+
+  async function deleteScore(id) {
+    const token = session.access_token
+    await fetch('/api/scores', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id })
+    })
+    setMessage('Score deleted!')
     fetchAll()
   }
 
@@ -253,13 +285,33 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-2">
               {scores.map((s, i) => (
-                <div key={s.id} className="flex items-center justify-between bg-gray-800 rounded-lg px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-gray-600 text-xs w-4">{i + 1}</span>
-                    <span className="font-bold text-xl">{s.score}</span>
-                    <span className="text-gray-500 text-sm">pts</span>
-                  </div>
-                  <span className="text-gray-500 text-sm">{s.score_date}</span>
+                <div key={s.id} className="bg-gray-800 rounded-lg px-4 py-3">
+                  {editingScore === s.id ? (
+                    <div className="flex gap-2 flex-wrap items-center">
+                      <input type="number" min="1" max="45" value={editVal}
+                        onChange={e => setEditVal(e.target.value)}
+                        className="bg-gray-700 text-white rounded px-3 py-1 w-24 border border-gray-600 focus:outline-none focus:border-green-500" />
+                      <input type="date" value={editDate}
+                        onChange={e => setEditDate(e.target.value)}
+                        className="bg-gray-700 text-white rounded px-3 py-1 border border-gray-600 focus:outline-none focus:border-green-500" />
+                      <button onClick={saveEditScore} className="text-xs bg-green-500 text-black font-bold px-3 py-1 rounded">Save</button>
+                      <button onClick={() => setEditingScore(null)} className="text-xs text-gray-400 hover:text-white">Cancel</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-gray-600 text-xs w-4">{i + 1}</span>
+                        <span className="font-bold text-xl">{s.score}</span>
+                        <span className="text-gray-500 text-sm">pts · {s.score_date}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => { setEditingScore(s.id); setEditVal(s.score); setEditDate(s.score_date) }}
+                          className="text-xs text-blue-400 hover:text-blue-300">Edit</button>
+                        <button onClick={() => deleteScore(s.id)}
+                          className="text-xs text-red-400 hover:text-red-300">Delete</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {scores.length === 5 && (
@@ -267,6 +319,36 @@ export default function Dashboard() {
                   ✓ All 5 scores entered — you're in the next draw!
                 </p>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Participation Summary */}
+        <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+          <h2 className="text-lg font-semibold mb-4">Draw Participation</h2>
+          {draws.length === 0 ? (
+            <p className="text-gray-500 text-sm">No draws have been run yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {draws.map(d => {
+                const won = winners.find(w => w.draws?.id === d.id || w.draw_id === d.id)
+                return (
+                  <div key={d.id} className="flex justify-between items-center bg-gray-800 rounded-xl px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium">{d.draw_month}</p>
+                      <p className="text-gray-500 text-xs">Numbers: {d.winning_numbers?.join(', ')}</p>
+                    </div>
+                    <div className="text-right">
+                      {won ? (
+                        <span className="text-yellow-400 text-xs font-bold">🏆 Won £{won.prize_amount}</span>
+                      ) : (
+                        <span className="text-gray-500 text-xs">{d.status}</span>
+                      )}
+                      <p className="text-emerald-400 text-xs">Pool: £{d.total_prize_pool}</p>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

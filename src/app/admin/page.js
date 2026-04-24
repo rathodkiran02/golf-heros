@@ -11,9 +11,12 @@ export default function AdminPage() {
   const [users, setUsers] = useState([])
   const [draws, setDraws] = useState([])
   const [winners, setWinners] = useState([])
+  const [charities, setCharities] = useState([])
   const [drawMonth, setDrawMonth] = useState('2026-07')
   const [drawResult, setDrawResult] = useState(null)
   const [message, setMessage] = useState('')
+  const [newCharity, setNewCharity] = useState({ name: '', description: '', is_featured: false })
+  const [editingCharity, setEditingCharity] = useState(null)
 
   useEffect(() => {
     if (!loading && !user) router.push('/login')
@@ -29,13 +32,14 @@ export default function AdminPage() {
     const data = await res.json()
     setUsers(data.users || [])
 
-    const drawsRes = await fetch('/api/draws')
-    const drawsData = await drawsRes.json()
-    setDraws(drawsData.draws || [])
-
-    const winnersRes = await fetch('/api/admin/winners', { headers })
-    const winnersData = await winnersRes.json()
-    setWinners(winnersData.winners || [])
+    const [drawsRes, winnersRes, charitiesRes] = await Promise.all([
+      fetch('/api/draws'),
+      fetch('/api/admin/winners', { headers }),
+      fetch('/api/admin/charities', { headers })
+    ])
+    setDraws((await drawsRes.json()).draws || [])
+    setWinners((await winnersRes.json()).winners || [])
+    setCharities((await charitiesRes.json()).charities || [])
   }
 
   async function runDraw() {
@@ -76,6 +80,45 @@ export default function AdminPage() {
     checkAdminAndFetch()
   }
 
+  async function addCharity() {
+    if (!newCharity.name) { setMessage('Name is required'); return }
+    const token = session.access_token
+    const res = await fetch('/api/admin/charities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ ...newCharity, is_active: true })
+    })
+    const data = await res.json()
+    if (data.error) { setMessage(data.error); return }
+    setNewCharity({ name: '', description: '', is_featured: false })
+    setMessage('Charity added!')
+    checkAdminAndFetch()
+  }
+
+  async function saveCharity() {
+    const token = session.access_token
+    const { id, ...updates } = editingCharity
+    await fetch('/api/admin/charities', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id, ...updates })
+    })
+    setEditingCharity(null)
+    setMessage('Charity updated!')
+    checkAdminAndFetch()
+  }
+
+  async function deleteCharity(id) {
+    const token = session.access_token
+    await fetch('/api/admin/charities', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ id })
+    })
+    setMessage('Charity deleted!')
+    checkAdminAndFetch()
+  }
+
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
       <p className="text-white">Loading...</p>
@@ -85,6 +128,8 @@ export default function AdminPage() {
   const tabs = [
     { id: 'draws', label: 'Draw Engine' },
     { id: 'winners', label: `Winners (${winners.length})` },
+    { id: 'charities', label: `Charities (${charities.length})` },
+    { id: 'analytics', label: 'Analytics' },
     { id: 'users', label: `Users (${users.length})` },
   ]
 
@@ -301,6 +346,125 @@ export default function AdminPage() {
                   }`}>{u.role}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* CHARITIES TAB */}
+        {activeTab === 'charities' && (
+          <>
+            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+              <h2 className="text-lg font-semibold mb-4">Add Charity</h2>
+              <div className="space-y-3">
+                <input value={newCharity.name} onChange={e => setNewCharity(p => ({...p, name: e.target.value}))}
+                  placeholder="Charity name" className="w-full bg-gray-800 text-white rounded-lg px-4 py-2 border border-gray-700 focus:outline-none focus:border-emerald-500" />
+                <textarea value={newCharity.description} onChange={e => setNewCharity(p => ({...p, description: e.target.value}))}
+                  placeholder="Description" rows={2} className="w-full bg-gray-800 text-white rounded-lg px-4 py-2 border border-gray-700 focus:outline-none focus:border-emerald-500 resize-none" />
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                    <input type="checkbox" checked={newCharity.is_featured} onChange={e => setNewCharity(p => ({...p, is_featured: e.target.checked}))}
+                      className="accent-emerald-500" />
+                    Featured
+                  </label>
+                  <button onClick={addCharity} className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold px-5 py-2 rounded-lg transition-colors">
+                    Add Charity
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+              <h2 className="text-lg font-semibold mb-4">All Charities</h2>
+              <div className="space-y-3">
+                {charities.map(c => (
+                  <div key={c.id} className="bg-gray-800 rounded-xl p-4">
+                    {editingCharity?.id === c.id ? (
+                      <div className="space-y-2">
+                        <input value={editingCharity.name} onChange={e => setEditingCharity(p => ({...p, name: e.target.value}))}
+                          className="w-full bg-gray-700 text-white rounded px-3 py-1 border border-gray-600 focus:outline-none" />
+                        <textarea value={editingCharity.description || ''} onChange={e => setEditingCharity(p => ({...p, description: e.target.value}))}
+                          rows={2} className="w-full bg-gray-700 text-white rounded px-3 py-1 border border-gray-600 focus:outline-none resize-none" />
+                        <div className="flex gap-2 items-center">
+                          <label className="flex items-center gap-2 text-sm text-gray-400">
+                            <input type="checkbox" checked={editingCharity.is_featured} onChange={e => setEditingCharity(p => ({...p, is_featured: e.target.checked}))} className="accent-emerald-500" />
+                            Featured
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-400">
+                            <input type="checkbox" checked={editingCharity.is_active} onChange={e => setEditingCharity(p => ({...p, is_active: e.target.checked}))} className="accent-emerald-500" />
+                            Active
+                          </label>
+                          <button onClick={saveCharity} className="text-xs bg-green-500 text-black font-bold px-3 py-1 rounded">Save</button>
+                          <button onClick={() => setEditingCharity(null)} className="text-xs text-gray-400 hover:text-white">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium">{c.name} {c.is_featured && <span className="text-yellow-400 text-xs ml-1">★ Featured</span>}</p>
+                          <p className="text-gray-500 text-sm mt-1">{c.description}</p>
+                          <span className={`text-xs mt-1 inline-block px-2 py-0.5 rounded-full ${c.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-600/20 text-gray-400'}`}>
+                            {c.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setEditingCharity({...c})} className="text-xs text-blue-400 hover:text-blue-300">Edit</button>
+                          <button onClick={() => deleteCharity(c.id)} className="text-xs text-red-400 hover:text-red-300">Delete</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ANALYTICS TAB */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'Total Users', value: users.length, color: 'text-blue-400' },
+                { label: 'Total Draws', value: draws.length, color: 'text-emerald-400' },
+                { label: 'Total Winners', value: winners.length, color: 'text-yellow-400' },
+                { label: 'Active Charities', value: charities.filter(c => c.is_active).length, color: 'text-purple-400' },
+              ].map(stat => (
+                <div key={stat.label} className="bg-gray-900 rounded-2xl p-5 border border-gray-800 text-center">
+                  <p className={`text-3xl font-black ${stat.color}`}>{stat.value}</p>
+                  <p className="text-gray-500 text-sm mt-1">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+              <h2 className="text-lg font-semibold mb-4">Prize Pool by Draw</h2>
+              {draws.length === 0 ? <p className="text-gray-500 text-sm">No draws yet.</p> : (
+                <div className="space-y-3">
+                  {draws.map(d => (
+                    <div key={d.id} className="flex justify-between items-center bg-gray-800 rounded-xl px-4 py-3">
+                      <p className="text-sm font-medium">{d.draw_month}</p>
+                      <div className="flex gap-4 text-sm">
+                        <span className="text-emerald-400">£{d.total_prize_pool} pool</span>
+                        <span className="text-gray-500">{d.status}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
+              <h2 className="text-lg font-semibold mb-4">Winner Breakdown</h2>
+              {['5_match','4_match','3_match'].map(type => {
+                const count = winners.filter(w => w.match_type === type).length
+                const label = type === '5_match' ? 'Jackpot' : type === '4_match' ? '4 Match' : '3 Match'
+                return (
+                  <div key={type} className="flex justify-between items-center py-2 border-b border-gray-800 last:border-0">
+                    <span className="text-sm text-gray-400">{label}</span>
+                    <span className="text-white font-bold">{count}</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
