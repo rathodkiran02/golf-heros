@@ -37,7 +37,7 @@ export default function Dashboard() {
       fetch('/api/charities'),
       fetch('/api/charities/select', { headers }),
       fetch('/api/winners', { headers }),
-      fetch('/api/admin/users', { headers }),
+      fetch('/api/admin/userlist', { headers }),
       fetch('/api/draws')
     ])
 
