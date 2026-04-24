@@ -1,7 +1,6 @@
 import { supabase, supabaseWithToken } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
 
-// GET - get current user's winnings
 export async function GET(request) {
   const authHeader = request.headers.get('authorization')
   const token = authHeader?.replace('Bearer ', '')
@@ -26,7 +25,6 @@ export async function GET(request) {
   return NextResponse.json({ winners: data })
 }
 
-// PATCH - user uploads proof
 export async function PATCH(request) {
   const authHeader = request.headers.get('authorization')
   const token = authHeader?.replace('Bearer ', '')
@@ -45,7 +43,7 @@ export async function PATCH(request) {
     .eq('id', winner_id)
     .eq('user_id', user.id)
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ winner: data })

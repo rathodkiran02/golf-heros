@@ -11,24 +11,16 @@ export async function GET(request) {
   }
 
   const db = supabaseWithToken(token)
-
   const { data: profile } = await db
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
+    .from('users').select('role').eq('id', user.id).single()
 
   if (profile?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('winners')
-    .select(`
-      *,
-      users (full_name, email),
-      draws (draw_month, winning_numbers)
-    `)
+    .select('*, users(full_name, email), draws(draw_month, winning_numbers)')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
@@ -45,28 +37,23 @@ export async function PATCH(request) {
   }
 
   const db = supabaseWithToken(token)
-
   const { data: profile } = await db
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
+    .from('users').select('role').eq('id', user.id).single()
 
   if (profile?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { winner_id, verification_status, payment_status } = await request.json()
-
   const updateData = { verification_status }
   if (payment_status) updateData.payment_status = payment_status
 
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('winners')
     .update(updateData)
     .eq('id', winner_id)
     .select()
-    .maybeSingle()
+    .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ winner: data })

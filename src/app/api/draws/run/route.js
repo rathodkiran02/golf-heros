@@ -35,10 +35,10 @@ export async function POST(request) {
   }
 
   // Step 2: Get all users with exactly 5 scores
-  const { data: allScores } = await supabase
-    .from('scores')
-    .select('user_id, score')
-
+  const { data: allScores } = await db
+       .from('scores')
+       .select('user_id, score')
+  console.log('Scores fetched:', allScores?.length, allScores)
   // Group scores by user
   const scoresByUser = {}
   allScores.forEach(({ user_id, score }) => {
